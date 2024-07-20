@@ -1,6 +1,7 @@
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
+const bodyParser = require('body-parser');
 
 const app = express();
 const server = http.createServer(app);
@@ -8,15 +9,23 @@ const wss = new WebSocket.Server({ server });
 
 const clients = new Map();
 
+// Use body-parser middleware
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
 wss.on('connection', (ws, req) => {
   let clientName = null;
 
   ws.on('message', (message) => {
-    const data = JSON.parse(message);
-    if (data.type === 'register') {
-      clientName = data.name;
-      clients.set(clientName, ws);
-      console.log(`Client registered: ${clientName}`);
+    try {
+      const data = JSON.parse(message);
+      if (data.type === 'register') {
+        clientName = data.name;
+        clients.set(clientName, ws);
+        console.log(`Client registered: ${clientName}`);
+      }
+    } catch (error) {
+      console.error('Error parsing message:', error);
     }
   });
 
@@ -27,8 +36,6 @@ wss.on('connection', (ws, req) => {
     }
   });
 });
-
-app.use(express.json());
 
 app.post('/send', (req, res) => {
   const { name, message } = req.body;
