@@ -1,90 +1,48 @@
-#!/usr/bin/env node
+const express = require('express');
+const http = require('http');
+const WebSocket = require('ws');
 
-/**
- * Module dependencies.
- */
+const app = express();
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
 
-var app = require('../app');
-var debug = require('debug')('nodejs-get-started:server');
-var http = require('http');
+const clients = new Map();
 
-/**
- * Get port from environment and store in Express.
- */
+wss.on('connection', (ws, req) => {
+  let clientName = null;
 
-var port = normalizePort(process.env.PORT || '3000');
-app.set('port', port);
+  ws.on('message', (message) => {
+    const data = JSON.parse(message);
+    if (data.type === 'register') {
+      clientName = data.name;
+      clients.set(clientName, ws);
+      console.log(`Client registered: ${clientName}`);
+    }
+  });
 
-/**
- * Create HTTP server.
- */
+  ws.on('close', () => {
+    if (clientName) {
+      clients.delete(clientName);
+      console.log(`Client disconnected: ${clientName}`);
+    }
+  });
+});
 
-var server = http.createServer(app);
+app.use(express.json());
 
-/**
- * Listen on provided port, on all network interfaces.
- */
-
-server.listen(port);
-server.on('error', onError);
-server.on('listening', onListening);
-
-/**
- * Normalize a port into a number, string, or false.
- */
-
-function normalizePort(val) {
-  var port = parseInt(val, 10);
-
-  if (isNaN(port)) {
-    // named pipe
-    return val;
+app.post('/send', (req, res) => {
+  const { name, message } = req.body;
+  const client = clients.get(name);
+  
+  if (client) {
+    client.send(JSON.stringify({ message }));
+    res.status(200).send('Message sent');
+  } else {
+    res.status(404).send('Client not found');
   }
+});
 
-  if (port >= 0) {
-    // port number
-    return port;
-  }
-
-  return false;
-}
-
-/**
- * Event listener for HTTP server "error" event.
- */
-
-function onError(error) {
-  if (error.syscall !== 'listen') {
-    throw error;
-  }
-
-  var bind = typeof port === 'string'
-    ? 'Pipe ' + port
-    : 'Port ' + port;
-
-  // handle specific listen errors with friendly messages
-  switch (error.code) {
-    case 'EACCES':
-      console.error(bind + ' requires elevated privileges');
-      process.exit(1);
-      break;
-    case 'EADDRINUSE':
-      console.error(bind + ' is already in use');
-      process.exit(1);
-      break;
-    default:
-      throw error;
-  }
-}
-
-/**
- * Event listener for HTTP server "listening" event.
- */
-
-function onListening() {
-  var addr = server.address();
-  var bind = typeof addr === 'string'
-    ? 'pipe ' + addr
-    : 'port ' + addr.port;
-  debug('Listening on ' + bind);
-}
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Server is listening on port ${PORT}`);
+});
